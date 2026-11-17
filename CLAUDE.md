@@ -43,11 +43,12 @@ connects it over stdio. Every tool goes through the one REST `client`.
   trailing slashes) and exports `client`.
 - **`src/sonarr/client.ts`** — `SonarrClient`, a thin `fetch` wrapper. Auth is the `X-Api-Key`
   header. `get`/`post`/`put`/`delete` are thin wrappers over `fetch()`, which returns parsed JSON
-  (or text for non-JSON responses) and `{ success: true }` for 204 and empty bodies. `fetchText()`
+  (or text for non-JSON responses) and `{ success: true }` for 204 and empty bodies. Requests use
+  `redirect: "error"` so the API key is never forwarded to another origin. `fetchText()`
   is used for log files. Throws on non-2xx with the response body in the message.
 - **`src/sonarr/format.ts`** — shared helpers: `buildQS` (arrays are **repeated** as separate query
   params, which is what ASP.NET model binding expects), `ok`/`err` (MCP content envelopes; `ok`
-  passes strings through unquoted), `pruneUndefined`, `summarizeSeries`/`summarizeEpisode`/
+  passes strings through unquoted), the annotation presets, the redaction helpers, `pruneUndefined`, `summarizeSeries`/`summarizeEpisode`/
   `summarizeRelease`, and `summarizeList` (maps a bare array or a paged `{ records }` envelope).
 - **`src/tools/*.ts`** — each exports a `register*Tools(server, client)` function that `server.ts`
   calls: `series`, `episodes`, `calendar`, `queue`, `history`, `wanted`, `blocklist`, `commands`,
@@ -63,9 +64,21 @@ test), config sections get `get_*` plus `update_*` when writable.
 
 - **ESM with Node16 module resolution: all relative imports must end in `.js`** (e.g.
   `import { ok } from "../sonarr/format.js"`), even though the source is `.ts`.
-- **Tool handler shape:** `server.tool(name, description, zodShape, async (args) => { try { return
-ok(await client.get(...)); } catch (e) { return err(e); } })`. The third argument is a raw Zod shape
-  object (`{}` when there are no params). Match this try/catch-`ok`/`err` style exactly.
+- **Tool handler shape:** `server.tool(name, description, zodShape, annotations, async (args) => {
+try { return ok(await client.get(...)); } catch (e) { return err(e); } })`. The third argument is a
+  raw Zod shape object (`{}` when there are no params). Match this try/catch-`ok`/`err` style exactly.
+- **Every tool has annotations.** Pass one of `READ`, `WRITE`, `UPDATE` (idempotent write), `DELETE`
+  (destructive, idempotent) or `DESTRUCTIVE` from `format.ts` as the fourth argument; `server.test.ts`
+  fails when a tool has none or when they contradict the tool's name prefix.
+- **Ids that end up in a URL path are `z.number().int().positive()`**, and config ids taken from a
+  passthrough object are validated the same way before they are interpolated.
+- **Secrets never reach the agent.** Config sections go through `redactSecrets` and every provider
+  response through `redactProvider`, which replace secret values with `[redacted]` (fields whose
+  `privacy` is not `normal`, secret-looking names, credentials inside URLs). Writes must never store
+  that placeholder: `update_*`/`test_*` provider tools call `restoreRedacted` to swap placeholders for
+  the stored values read from Sonarr, and `create_*` and the config updates reject them.
+- **`run_command` is limited to the `COMMANDS` allowlist** in `src/tools/commands.ts`. Do not add
+  commands that touch the host (`ApplicationUpdate`, `ResetApiKey`, log deletion).
 - **Tool params are `snake_case`; Sonarr's JSON is `camelCase`.** Handlers translate at the boundary.
 - **List tools summarize by default.** Sonarr resources are very large (images, overviews, alternate
   titles, per-season statistics). Any tool that can return many objects must summarize and offer
@@ -89,7 +102,7 @@ ok(await client.get(...)); } catch (e) { return err(e); } })`. The third argumen
 
 Tests live in `src/__tests__/*.test.ts`, with shared fixtures in `src/__tests__/helpers.ts` (not a
 test file itself, so vitest's `src/**/*.test.ts` glob skips it). `collectTools(...registrars)` passes
-a fake `{ tool: (name, desc, schema, handler) => ... }` server to the `register*Tools` functions to
+a fake `{ tool: (name, desc, schema, annotations, handler) => ... }` server to the `register*Tools` functions to
 capture handlers, then `stubFetch()` stubs global `fetch` and `callAt(mockFetch, i)` asserts the exact
 URL, method and parsed body of each request. Assert both the outgoing request and the output shaping.
 `config.ts` reads env at import time and exits if it's missing, so `config.test.ts` `vi.stubEnv(...)`

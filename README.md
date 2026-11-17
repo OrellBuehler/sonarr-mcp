@@ -75,7 +75,9 @@ If Sonarr runs behind a reverse proxy with a URL base, include it in `SONARR_URL
 | `SONARR_SERVER`  | –        | Accepted as an alias for `SONARR_URL`.                                                                         |
 | `SONARR_API_KEY` | yes      | API key from Settings > General > Security.                                                                    |
 
-The server speaks stdio only — it is a single-user, single-instance server. It is never asked for your key over the network; the key is read from the environment and sent to Sonarr as the `X-Api-Key` header.
+The server speaks stdio only — it is a single-user, single-instance server. It is never asked for your key over the network; the key is read from the environment and sent to Sonarr as the `X-Api-Key` header. Redirects are not followed, so the key is never forwarded to another host — point `SONARR_URL` at the final address, including the URL base.
+
+Requires Node.js 22 or newer.
 
 ## Available tools
 
@@ -108,8 +110,10 @@ The server speaks stdio only — it is a single-user, single-instance server. It
 - **List tools return summaries.** `list_series`, `list_episodes`, `get_calendar`, `search_releases` and the wanted lists strip images, overviews and alternate titles so a large library still fits in context. Pass `detailed: true`, or use the matching `get_*` tool, when you need the full object.
 - **Ids.** Sonarr series ids are not TVDB ids. `lookup_series` returns `tvdbId` (what `add_series` takes); everything else takes the Sonarr `id` from `list_series`.
 - **Searching.** `search_series`, `search_season` and `search_episodes` queue Sonarr's own automatic search and return a command id — poll it with `get_command`. `search_releases` instead queries indexers live and returns the candidate releases for you to pick from, which you then send with `grab_release`.
-- **Provider configuration.** Indexers, download clients, import lists and notifications are configured through an implementation-specific `fields` array. Call `get_*_schema` for the template, then pass the whole object to `create_*`; for updates, fetch with `get_*`, change what you need, and send it back. Sonarr masks secrets in responses, so re-sending a fetched object keeps the stored secret.
-- **Destructive operations are explicit.** `delete_series`, `delete_series_bulk` and the queue tools only touch files on disk when you pass `delete_files` / `remove_from_client`, and both default to the safe choice. `restart_sonarr` is included; there is deliberately no shutdown, restore-backup or update-install tool.
+- **Provider configuration.** Indexers, download clients, import lists and notifications are configured through an implementation-specific `fields` array. Call `get_*_schema` for the template, then pass the whole object to `create_*`; for updates, fetch with `get_*`, change what you need, and send it back.
+- **Secrets are redacted.** Config and provider tools never return secrets: the host config's API key and passwords, provider fields Sonarr marks as private (API key, password, username), fields whose name looks secret (`apiKey`, `passkey`, `token`, `cookie`, `webHookUrl`, ...) and credentials embedded in URLs all come back as `[redacted]`. Leave those values untouched when you send an object to `update_*` — the server swaps each placeholder for the value Sonarr has stored before saving, and refuses the write if there is none. `create_*` rejects placeholders outright.
+- **Commands are allowlisted.** `run_command` only queues library and maintenance commands (refresh, rescan, searches, RSS sync, rename, import, housekeeping, health check, backup). `ApplicationUpdate`, `ResetApiKey`, log deletion and the like are not available.
+- **Destructive operations are explicit.** `delete_series`, `delete_series_bulk` and the queue tools only touch files on disk when you pass `delete_files` / `remove_from_client`, and both default to `false`. Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`, `idempotentHint`) so clients can ask before running the risky ones. `restart_sonarr` is included; there is deliberately no shutdown, restore-backup or update-install tool.
 - **Sonarr v4.** The v3 API paths are what Sonarr v4 serves, so this works against both v3 and v4. A handful of endpoints in the published spec (language profiles) exist only on v3 and are not exposed.
 
 ## Development
