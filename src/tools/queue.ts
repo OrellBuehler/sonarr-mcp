@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { buildQS, ok, err } from "../sonarr/format.js";
+import { buildQS, ok, err, DELETE, READ, WRITE } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 const sortDirection = ["default", "ascending", "descending"] as const;
@@ -27,6 +27,7 @@ export function registerQueueTools(server: McpServer, client: SonarrClient) {
       include_series: z.boolean().optional().describe("Include the parent series object"),
       include_episode: z.boolean().optional().describe("Include the episode object"),
     },
+    READ,
     async ({
       page,
       page_size,
@@ -68,6 +69,7 @@ export function registerQueueTools(server: McpServer, client: SonarrClient) {
       include_series: z.boolean().optional().describe("Include the parent series object"),
       include_episode: z.boolean().optional().describe("Include the episode object"),
     },
+    READ,
     async ({ series_id, episode_ids, include_series, include_episode }) => {
       try {
         const qs = buildQS({
@@ -88,6 +90,7 @@ export function registerQueueTools(server: McpServer, client: SonarrClient) {
     "get_queue_status",
     "Get queue counts by state — total, errors, warnings and how many items need manual interaction.",
     {},
+    READ,
     async () => {
       try {
         return ok(await client.get("/api/v3/queue/status"));
@@ -99,13 +102,13 @@ export function registerQueueTools(server: McpServer, client: SonarrClient) {
 
   server.tool(
     "remove_queue_item",
-    "Remove one item from the queue, optionally also removing it from the download client and blocklisting the release so it is not grabbed again.",
+    "Remove one item from the queue. The download stays in the download client unless remove_from_client is true; optionally blocklist the release so it is not grabbed again.",
     {
-      id: z.number().describe("Queue item id"),
+      id: z.number().int().positive().describe("Queue item id"),
       remove_from_client: z
         .boolean()
         .optional()
-        .describe("Also remove the download from the download client (default true)"),
+        .describe("Also remove the download and its data from the download client (default false)"),
       blocklist: z
         .boolean()
         .optional()
@@ -119,10 +122,11 @@ export function registerQueueTools(server: McpServer, client: SonarrClient) {
         .optional()
         .describe("Move the download to the post-import category instead of deleting it"),
     },
+    DELETE,
     async ({ id, remove_from_client, blocklist, skip_redownload, change_category }) => {
       try {
         const qs = buildQS({
-          removeFromClient: remove_from_client ?? true,
+          removeFromClient: remove_from_client ?? false,
           blocklist: blocklist ?? false,
           skipRedownload: skip_redownload ?? false,
           changeCategory: change_category,
@@ -136,18 +140,22 @@ export function registerQueueTools(server: McpServer, client: SonarrClient) {
 
   server.tool(
     "remove_queue_items",
-    "Remove several queue items at once, with the same options as remove_queue_item.",
+    "Remove several queue items at once, with the same options and defaults as remove_queue_item.",
     {
-      ids: z.array(z.number()).describe("Queue item ids"),
-      remove_from_client: z.boolean().optional().describe("Also remove from the download client"),
+      ids: z.array(z.number().int().positive()).describe("Queue item ids"),
+      remove_from_client: z
+        .boolean()
+        .optional()
+        .describe("Also remove from the download client (default false)"),
       blocklist: z.boolean().optional().describe("Blocklist the releases"),
       skip_redownload: z.boolean().optional().describe("Do not search for replacements"),
       change_category: z.boolean().optional().describe("Move to the post-import category"),
     },
+    DELETE,
     async ({ ids, remove_from_client, blocklist, skip_redownload, change_category }) => {
       try {
         const qs = buildQS({
-          removeFromClient: remove_from_client ?? true,
+          removeFromClient: remove_from_client ?? false,
           blocklist: blocklist ?? false,
           skipRedownload: skip_redownload ?? false,
           changeCategory: change_category,
@@ -162,7 +170,8 @@ export function registerQueueTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "grab_queue_item",
     "Force Sonarr to import a queue item that is stuck pending or waiting on manual interaction.",
-    { id: z.number().describe("Queue item id") },
+    { id: z.number().int().positive().describe("Queue item id") },
+    WRITE,
     async ({ id }) => {
       try {
         return ok(await client.post(`/api/v3/queue/grab/${id}`));
@@ -175,7 +184,8 @@ export function registerQueueTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "grab_queue_items",
     "Force import of several stuck queue items at once.",
-    { ids: z.array(z.number()).describe("Queue item ids") },
+    { ids: z.array(z.number().int().positive()).describe("Queue item ids") },
+    WRITE,
     async ({ ids }) => {
       try {
         return ok(await client.post("/api/v3/queue/grab/bulk", { ids }));

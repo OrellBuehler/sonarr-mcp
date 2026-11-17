@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { buildQS, ok, err, summarizeRelease } from "../sonarr/format.js";
+import { buildQS, ok, err, summarizeRelease, READ, WRITE } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 export function registerReleaseTools(server: McpServer, client: SonarrClient) {
@@ -20,6 +20,7 @@ export function registerReleaseTools(server: McpServer, client: SonarrClient) {
         .describe("Include releases Sonarr rejected (default true)"),
       detailed: z.boolean().optional().describe("Return full release objects instead of summaries"),
     },
+    READ,
     async ({ episode_id, series_id, season_number, include_rejected, detailed }) => {
       try {
         const qs = buildQS({
@@ -46,6 +47,7 @@ export function registerReleaseTools(server: McpServer, client: SonarrClient) {
       guid: z.string().describe("Release guid from search_releases"),
       indexer_id: z.number().describe("indexerId of the release from search_releases"),
     },
+    WRITE,
     async ({ guid, indexer_id }) => {
       try {
         return ok(await client.post("/api/v3/release", { guid, indexerId: indexer_id }));
@@ -68,6 +70,7 @@ export function registerReleaseTools(server: McpServer, client: SonarrClient) {
         .optional()
         .describe("Hide files that are already in the library (default true)"),
     },
+    READ,
     async ({ folder, download_id, series_id, season_number, filter_existing_files }) => {
       try {
         const qs = buildQS({
@@ -89,9 +92,10 @@ export function registerReleaseTools(server: McpServer, client: SonarrClient) {
     "get_rename_preview",
     "Preview which existing files would be renamed under the current naming configuration, showing the old and new paths. Run the RenameFiles command to apply.",
     {
-      series_id: z.number().describe("Sonarr series id"),
+      series_id: z.number().int().positive().describe("Sonarr series id"),
       season_number: z.number().optional().describe("Only this season number"),
     },
+    READ,
     async ({ series_id, season_number }) => {
       try {
         const qs = buildQS({ seriesId: series_id, seasonNumber: season_number });
@@ -110,6 +114,7 @@ export function registerReleaseTools(server: McpServer, client: SonarrClient) {
       title: z.string().optional().describe("Release title to parse"),
       path: z.string().optional().describe("File path to parse instead of a title"),
     },
+    READ,
     async ({ title, path }) => {
       try {
         return ok(await client.get(`/api/v3/parse${buildQS({ title, path })}`));

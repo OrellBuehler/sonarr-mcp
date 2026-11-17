@@ -23,6 +23,19 @@ describe("SonarrClient", () => {
     expect(call.headers["Content-Type"]).toBeUndefined();
   });
 
+  it("refuses to follow redirects so the API key is never forwarded", async () => {
+    mockFetch.mockResolvedValue(mockJson({ ok: 1 }));
+    const client = new SonarrClient("http://sonarr:8989", "secret-key");
+    await client.get("/api/v3/series");
+    await client.post("/api/v3/tag", { label: "x" });
+    await client.fetch("/api/v3/series", { redirect: "follow" });
+    await client.fetchText("/api/v3/log/file/sonarr.txt");
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    for (const [, options] of mockFetch.mock.calls) {
+      expect(options.redirect).toBe("error");
+    }
+  });
+
   it("sets Content-Type only when there is a JSON body", async () => {
     mockFetch.mockResolvedValueOnce(mockJson({ id: 1 }));
     const client = new SonarrClient("http://sonarr:8989", "k");

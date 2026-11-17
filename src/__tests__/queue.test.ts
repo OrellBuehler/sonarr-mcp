@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { registerQueueTools } from "../tools/queue.js";
 import { collectTools, mockJson, stubFetch, callAt, payload } from "./helpers.js";
 
-const { tools } = collectTools(registerQueueTools);
+const { tools, descriptions } = collectTools(registerQueueTools);
 
 describe("queue tools", () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -29,11 +29,11 @@ describe("queue tools", () => {
     );
   });
 
-  it("remove_queue_item defaults removeFromClient true and blocklist false", async () => {
+  it("remove_queue_item defaults removeFromClient and blocklist to false", async () => {
     mockFetch.mockResolvedValueOnce(mockJson({}));
     await tools.get("remove_queue_item")!({ id: 12 });
     expect(callAt(mockFetch).url).toBe(
-      "http://sonarr:8989/api/v3/queue/12?removeFromClient=true&blocklist=false&skipRedownload=false",
+      "http://sonarr:8989/api/v3/queue/12?removeFromClient=false&blocklist=false&skipRedownload=false",
     );
   });
 
@@ -42,9 +42,16 @@ describe("queue tools", () => {
     await tools.get("remove_queue_items")!({ ids: [1, 2], blocklist: true });
     const call = callAt(mockFetch);
     expect(call.url).toBe(
-      "http://sonarr:8989/api/v3/queue/bulk?removeFromClient=true&blocklist=true&skipRedownload=false",
+      "http://sonarr:8989/api/v3/queue/bulk?removeFromClient=false&blocklist=true&skipRedownload=false",
     );
     expect(call.body).toEqual({ ids: [1, 2] });
+  });
+
+  it("removes from the download client only when asked", async () => {
+    mockFetch.mockResolvedValueOnce(mockJson({}));
+    await tools.get("remove_queue_item")!({ id: 12, remove_from_client: true });
+    expect(callAt(mockFetch).url).toContain("removeFromClient=true");
+    expect(descriptions.get("remove_queue_item")).toContain("unless remove_from_client is true");
   });
 
   it("get_queue_details counts the returned items", async () => {

@@ -8,6 +8,11 @@ import {
   summarizeEpisode,
   summarizeRelease,
   summarizeList,
+  redactSecrets,
+  redactProvider,
+  hasRedacted,
+  restoreRedacted,
+  REDACTED,
 } from "../sonarr/format.js";
 
 describe("buildQS", () => {
@@ -97,5 +102,64 @@ describe("summaries", () => {
     expect(mapped.totalRecords).toBe(1);
     expect(mapped.records[0]).toEqual({ id: 1, seasonNumber: 2 });
     expect(summarizeList(paged, summarizeEpisode, true)).toBe(paged);
+  });
+});
+
+describe("redaction", () => {
+  it("redactSecrets masks secret-looking keys and credentials inside URLs", () => {
+    expect(
+      redactSecrets({
+        apiKey: "k",
+        api_key: "k",
+        proxyPassword: "p",
+        authToken: "t",
+        clientSecret: "s",
+        password: "",
+        port: 8989,
+        authenticationMethod: "forms",
+        url: "http://a:b@host/path?token=abc&x=1",
+      }),
+    ).toEqual({
+      apiKey: REDACTED,
+      api_key: REDACTED,
+      proxyPassword: REDACTED,
+      authToken: REDACTED,
+      clientSecret: REDACTED,
+      password: "",
+      port: 8989,
+      authenticationMethod: "forms",
+      url: `http://${REDACTED}@host/path?token=${REDACTED}&x=1`,
+    });
+    expect(redactSecrets([1])).toEqual([1]);
+    expect(redactSecrets("text")).toBe("text");
+  });
+
+  it("redactProvider handles arrays, presets and non-string private values", () => {
+    const out = redactProvider([
+      {
+        fields: [{ name: "pin", value: 1234, privacy: "password" }],
+        presets: [{ fields: [{ name: "apiKey", value: "x" }] }],
+      },
+    ]) as any[];
+    expect(out[0].fields[0].value).toBe(REDACTED);
+    expect(out[0].presets[0].fields[0].value).toBe(REDACTED);
+  });
+
+  it("hasRedacted finds placeholders at any depth", () => {
+    expect(hasRedacted({ a: [{ b: `x${REDACTED}y` }] })).toBe(true);
+    expect(hasRedacted({ a: [{ b: "********" }], c: 1, d: null })).toBe(false);
+  });
+
+  it("restoreRedacted takes top-level values and fields from the stored object", () => {
+    expect(
+      restoreRedacted(
+        { name: "n", url: `http://${REDACTED}@h`, fields: [{ name: "k", value: REDACTED }] },
+        { url: "http://a:b@h", fields: [{ name: "k", value: "real" }] },
+      ),
+    ).toEqual({ name: "n", url: "http://a:b@h", fields: [{ name: "k", value: "real" }] });
+    expect(() => restoreRedacted({ url: REDACTED }, {})).toThrow("no stored value");
+    expect(() => restoreRedacted({ fields: [{ name: "k", value: REDACTED }] }, {})).toThrow(
+      "no stored value",
+    );
   });
 });

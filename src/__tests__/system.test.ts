@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { z } from "zod";
 import { registerSystemTools } from "../tools/system.js";
 import { collectTools, mockJson, mockText, stubFetch, callAt, payload } from "./helpers.js";
 
-const { tools } = collectTools(registerSystemTools);
+const { tools, schemas } = collectTools(registerSystemTools);
 
 describe("system tools", () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -35,6 +36,14 @@ describe("system tools", () => {
     const res = await tools.get("get_log_file")!({ filename: "sonarr.txt" });
     expect(callAt(mockFetch).url).toBe("http://sonarr:8989/api/v3/log/file/sonarr.txt");
     expect(res.content[0].text).toBe("2026-09-05 error boom");
+  });
+
+  it("get_log_file only accepts plain file names", () => {
+    const schema = z.object(schemas.get("get_log_file") as z.ZodRawShape);
+    expect(schema.safeParse({ filename: "sonarr.debug.0.txt" }).success).toBe(true);
+    for (const filename of ["..", ".", "../config.xml", "a/b.txt", "a\\b.txt", "%2e%2e", ""]) {
+      expect(schema.safeParse({ filename }).success).toBe(false);
+    }
   });
 
   it("restart_sonarr posts to the restart endpoint", async () => {

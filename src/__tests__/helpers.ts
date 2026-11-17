@@ -10,15 +10,25 @@ export type Register = (server: any, client: SonarrClient) => void;
 export function collectTools(...registrars: Register[]) {
   const tools = new Map<string, ToolHandler>();
   const schemas = new Map<string, unknown>();
+  const descriptions = new Map<string, string>();
+  const annotations = new Map<string, Record<string, boolean>>();
   const server = {
-    tool: (name: string, _desc: string, schema: unknown, handler: ToolHandler) => {
+    tool: (
+      name: string,
+      desc: string,
+      schema: unknown,
+      hints: Record<string, boolean>,
+      handler: ToolHandler,
+    ) => {
       tools.set(name, handler);
       schemas.set(name, schema);
+      descriptions.set(name, desc);
+      annotations.set(name, hints);
     },
   };
   const client = new SonarrClient("http://sonarr:8989", "test-key");
   for (const register of registrars) register(server as any, client);
-  return { tools, schemas };
+  return { tools, schemas, descriptions, annotations };
 }
 
 export function mockJson(body: unknown, status = 200) {

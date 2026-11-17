@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ok, err } from "../sonarr/format.js";
+import { ok, err, DELETE, READ, UPDATE, WRITE } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 export function registerProfileTools(server: McpServer, client: SonarrClient) {
@@ -13,6 +13,7 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
         .optional()
         .describe("Include the full items and formatItems arrays (large payload)"),
     },
+    READ,
     async ({ detailed }) => {
       try {
         const data = (await client.get("/api/v3/qualityprofile")) as Record<string, unknown>[];
@@ -43,7 +44,8 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "get_quality_profile",
     "Get one quality profile in full, including every quality item and custom format score.",
-    { id: z.number().describe("Quality profile id") },
+    { id: z.number().int().positive().describe("Quality profile id") },
+    READ,
     async ({ id }) => {
       try {
         return ok(await client.get(`/api/v3/qualityprofile/${id}`));
@@ -57,6 +59,7 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "get_quality_profile_schema",
     "Get a blank quality profile with every quality Sonarr knows about — the template for create_quality_profile.",
     {},
+    READ,
     async () => {
       try {
         return ok(await client.get("/api/v3/qualityprofile/schema"));
@@ -69,7 +72,8 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "create_quality_profile",
     "Create a quality profile. Start from get_quality_profile_schema, set name, cutoff and which items are allowed.",
-    { profile: z.record(z.unknown()).describe("Full quality profile object") },
+    { profile: z.record(z.string(), z.unknown()).describe("Full quality profile object") },
+    WRITE,
     async ({ profile }) => {
       try {
         return ok(await client.post("/api/v3/qualityprofile", profile));
@@ -83,9 +87,12 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "update_quality_profile",
     "Update a quality profile. Fetch it with get_quality_profile, change what you need and send the whole object back.",
     {
-      id: z.number().describe("Quality profile id"),
-      profile: z.record(z.unknown()).describe("Full quality profile object including id"),
+      id: z.number().int().positive().describe("Quality profile id"),
+      profile: z
+        .record(z.string(), z.unknown())
+        .describe("Full quality profile object including id"),
     },
+    UPDATE,
     async ({ id, profile }) => {
       try {
         return ok(await client.put(`/api/v3/qualityprofile/${id}`, { ...profile, id }));
@@ -98,7 +105,8 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "delete_quality_profile",
     "Delete a quality profile. It must not be in use by any series.",
-    { id: z.number().describe("Quality profile id") },
+    { id: z.number().int().positive().describe("Quality profile id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/qualityprofile/${id}`));
@@ -112,6 +120,7 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "list_quality_definitions",
     "List quality definitions — the size limits (min, max, preferred MB per minute) Sonarr applies to each quality.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/qualitydefinition")) as unknown[];
@@ -127,9 +136,10 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "Update the size limits of one or more quality definitions. Send the full definition objects from list_quality_definitions with minSize, maxSize or preferredSize changed.",
     {
       definitions: z
-        .array(z.record(z.unknown()))
+        .array(z.record(z.string(), z.unknown()))
         .describe("Full quality definition objects including id"),
     },
+    UPDATE,
     async ({ definitions }) => {
       try {
         return ok(await client.put("/api/v3/qualitydefinition/update", definitions));
@@ -143,6 +153,7 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "list_custom_formats",
     "List custom formats with their specifications. Custom format scores in a quality profile decide which releases are preferred.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/customformat")) as unknown[];
@@ -156,7 +167,8 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "get_custom_format",
     "Get one custom format with its full specification list.",
-    { id: z.number().describe("Custom format id") },
+    { id: z.number().int().positive().describe("Custom format id") },
+    READ,
     async ({ id }) => {
       try {
         return ok(await client.get(`/api/v3/customformat/${id}`));
@@ -170,6 +182,7 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "get_custom_format_schema",
     "List the specification types a custom format can use (release title regex, size, language, quality modifier, ...) with their fields.",
     {},
+    READ,
     async () => {
       try {
         return ok(await client.get("/api/v3/customformat/schema"));
@@ -182,7 +195,8 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "create_custom_format",
     "Create a custom format. Build the specifications from get_custom_format_schema.",
-    { custom_format: z.record(z.unknown()).describe("Full custom format object") },
+    { custom_format: z.record(z.string(), z.unknown()).describe("Full custom format object") },
+    WRITE,
     async ({ custom_format }) => {
       try {
         return ok(await client.post("/api/v3/customformat", custom_format));
@@ -196,9 +210,12 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "update_custom_format",
     "Update a custom format. Fetch it first and send the whole object back.",
     {
-      id: z.number().describe("Custom format id"),
-      custom_format: z.record(z.unknown()).describe("Full custom format object including id"),
+      id: z.number().int().positive().describe("Custom format id"),
+      custom_format: z
+        .record(z.string(), z.unknown())
+        .describe("Full custom format object including id"),
     },
+    UPDATE,
     async ({ id, custom_format }) => {
       try {
         return ok(await client.put(`/api/v3/customformat/${id}`, { ...custom_format, id }));
@@ -211,7 +228,8 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "delete_custom_format",
     "Delete a custom format.",
-    { id: z.number().describe("Custom format id") },
+    { id: z.number().int().positive().describe("Custom format id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/customformat/${id}`));
@@ -225,6 +243,7 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "list_release_profiles",
     "List release profiles — the required, ignored and preferred term rules applied to release titles.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/releaseprofile")) as unknown[];
@@ -238,7 +257,8 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "create_release_profile",
     "Create a release profile, e.g. { name, enabled: true, required: [], ignored: ['x265'], indexerId: 0, tags: [] }.",
-    { release_profile: z.record(z.unknown()).describe("Full release profile object") },
+    { release_profile: z.record(z.string(), z.unknown()).describe("Full release profile object") },
+    WRITE,
     async ({ release_profile }) => {
       try {
         return ok(await client.post("/api/v3/releaseprofile", release_profile));
@@ -252,9 +272,12 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "update_release_profile",
     "Update a release profile. Fetch it from list_release_profiles and send the whole object back.",
     {
-      id: z.number().describe("Release profile id"),
-      release_profile: z.record(z.unknown()).describe("Full release profile object including id"),
+      id: z.number().int().positive().describe("Release profile id"),
+      release_profile: z
+        .record(z.string(), z.unknown())
+        .describe("Full release profile object including id"),
     },
+    UPDATE,
     async ({ id, release_profile }) => {
       try {
         return ok(await client.put(`/api/v3/releaseprofile/${id}`, { ...release_profile, id }));
@@ -267,7 +290,8 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "delete_release_profile",
     "Delete a release profile.",
-    { id: z.number().describe("Release profile id") },
+    { id: z.number().int().positive().describe("Release profile id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/releaseprofile/${id}`));
@@ -281,6 +305,7 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "list_delay_profiles",
     "List delay profiles — how long Sonarr waits for a better release before grabbing, per protocol and tag.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/delayprofile")) as unknown[];
@@ -295,6 +320,7 @@ export function registerProfileTools(server: McpServer, client: SonarrClient) {
     "list_languages",
     "List the languages Sonarr knows, with the ids used in language profiles and episode file edits.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/language")) as unknown[];
