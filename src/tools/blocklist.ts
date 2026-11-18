@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { buildQS, ok, err } from "../sonarr/format.js";
+import { buildQS, ok, err, DELETE, READ } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 const sortDirection = ["default", "ascending", "descending"] as const;
@@ -20,6 +20,7 @@ export function registerBlocklistTools(server: McpServer, client: SonarrClient) 
         .optional()
         .describe("Only these download protocols"),
     },
+    READ,
     async ({ page, page_size, sort_key, sort_direction, series_ids, protocols }) => {
       try {
         const qs = buildQS({
@@ -40,7 +41,8 @@ export function registerBlocklistTools(server: McpServer, client: SonarrClient) 
   server.tool(
     "remove_blocklist_item",
     "Remove one release from the blocklist so Sonarr may grab it again.",
-    { id: z.number().describe("Blocklist entry id") },
+    { id: z.number().int().positive().describe("Blocklist entry id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/blocklist/${id}`));
@@ -54,6 +56,7 @@ export function registerBlocklistTools(server: McpServer, client: SonarrClient) 
     "remove_blocklist_items",
     "Remove several releases from the blocklist at once.",
     { ids: z.array(z.number()).describe("Blocklist entry ids") },
+    DELETE,
     async ({ ids }) => {
       try {
         return ok(await client.delete("/api/v3/blocklist/bulk", { ids }));

@@ -7,6 +7,10 @@ import {
   pruneUndefined,
   summarizeSeries,
   type SonarrSeries,
+  DELETE,
+  READ,
+  UPDATE,
+  WRITE,
 } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
@@ -45,6 +49,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
         .optional()
         .describe("Return the full series objects instead of summaries (large payload)"),
     },
+    READ,
     async ({ search, monitored, tvdb_id, detailed }) => {
       try {
         const data = (await client.get(
@@ -71,9 +76,10 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
     "get_series",
     "Get the full series object for one series, including seasons with their per-season statistics and monitored flags.",
     {
-      id: z.number().describe("Sonarr series id (not the TVDB id)"),
+      id: z.number().int().positive().describe("Sonarr series id (not the TVDB id)"),
       include_season_images: z.boolean().optional().describe("Include per-season image URLs"),
     },
+    READ,
     async ({ id, include_season_images }) => {
       try {
         return ok(
@@ -91,6 +97,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
     "lookup_series",
     "Search TVDB for series to add, by title or by an id term such as 'tvdb:121361' or 'imdb:tt0944947'. Returns candidates with tvdbId, title, year and overview — pass the tvdbId to add_series.",
     { term: z.string().describe("Search term, e.g. 'Breaking Bad' or 'tvdb:81189'") },
+    READ,
     async ({ term }) => {
       try {
         const data = (await client.get(
@@ -144,6 +151,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
         .describe("Start a search for cutoff unmet episodes right after adding"),
       tags: z.array(z.number()).optional().describe("Tag ids to apply, from list_tags"),
     },
+    WRITE,
     async ({
       tvdb_id,
       quality_profile_id,
@@ -187,7 +195,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
     "update_series",
     "Update settings on an existing series. Fetches the current series, merges the given fields and puts it back — only the fields you pass are changed.",
     {
-      id: z.number().describe("Sonarr series id"),
+      id: z.number().int().positive().describe("Sonarr series id"),
       monitored: z.boolean().optional().describe("Monitor or unmonitor the series"),
       quality_profile_id: z.number().optional().describe("New quality profile id"),
       series_type: z.enum(seriesTypes).optional().describe("New series type"),
@@ -204,6 +212,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
         .optional()
         .describe("Move existing files when the path or root folder changes (default false)"),
     },
+    UPDATE,
     async ({
       id,
       monitored,
@@ -246,7 +255,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
     "delete_series",
     "Remove a series from the library. Optionally delete its files from disk and add an import list exclusion so lists do not re-add it.",
     {
-      id: z.number().describe("Sonarr series id"),
+      id: z.number().int().positive().describe("Sonarr series id"),
       delete_files: z
         .boolean()
         .optional()
@@ -256,6 +265,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
         .optional()
         .describe("Add an import list exclusion for this series (default false)"),
     },
+    DELETE,
     async ({ id, delete_files, add_import_list_exclusion }) => {
       try {
         return ok(
@@ -293,6 +303,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
         .optional()
         .describe("Move files when changing the root folder (default false)"),
     },
+    UPDATE,
     async ({
       series_ids,
       monitored,
@@ -337,6 +348,7 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
         .optional()
         .describe("Add import list exclusions (default false)"),
     },
+    DELETE,
     async ({ series_ids, delete_files, add_import_list_exclusion }) => {
       try {
         return ok(
@@ -355,7 +367,8 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "get_series_folder",
     "Get the folder path Sonarr would use for a series, given the current naming configuration.",
-    { id: z.number().describe("Sonarr series id") },
+    { id: z.number().int().positive().describe("Sonarr series id") },
+    READ,
     async ({ id }) => {
       try {
         return ok(await client.get(`/api/v3/series/${id}/folder`));
@@ -369,13 +382,14 @@ export function registerSeriesTools(server: McpServer, client: SonarrClient) {
     "set_season_monitored",
     "Monitor or unmonitor whole seasons of a series. Pass season numbers (0 is specials); omit them to apply to every season.",
     {
-      series_id: z.number().describe("Sonarr series id"),
+      series_id: z.number().int().positive().describe("Sonarr series id"),
       monitored: z.boolean().describe("true to monitor, false to unmonitor"),
       season_numbers: z
         .array(z.number())
         .optional()
         .describe("Season numbers to change; all seasons when omitted"),
     },
+    UPDATE,
     async ({ series_id, monitored, season_numbers }) => {
       try {
         const current = (await client.get(`/api/v3/series/${series_id}`)) as SonarrSeries;

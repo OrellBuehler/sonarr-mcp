@@ -1,7 +1,30 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ok, err } from "../sonarr/format.js";
+import { ok, err, DELETE, DESTRUCTIVE, READ, WRITE } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
+
+export const COMMANDS = [
+  "RefreshSeries",
+  "RescanSeries",
+  "SeriesSearch",
+  "SeasonSearch",
+  "EpisodeSearch",
+  "MissingEpisodeSearch",
+  "CutoffUnmetEpisodeSearch",
+  "RssSync",
+  "RenameFiles",
+  "RenameSeries",
+  "DownloadedEpisodesScan",
+  "ManualImport",
+  "RefreshMonitoredDownloads",
+  "ProcessMonitoredDownloads",
+  "ImportListSync",
+  "ClearBlocklist",
+  "Housekeeping",
+  "MessagingCleanup",
+  "CheckHealth",
+  "Backup",
+] as const;
 
 function summarizeCommand(c: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -23,6 +46,7 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
     "list_commands",
     "List commands Sonarr is currently running or has recently run, with their status and duration.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/command")) as Record<string, unknown>[];
@@ -36,7 +60,8 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "get_command",
     "Get the status of a single command by id — poll this after starting a search or refresh.",
-    { id: z.number().describe("Command id returned when the command was queued") },
+    { id: z.number().int().positive().describe("Command id returned when the command was queued") },
+    READ,
     async ({ id }) => {
       try {
         return ok(await client.get(`/api/v3/command/${id}`));
@@ -48,20 +73,26 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
 
   server.tool(
     "run_command",
-    "Queue any Sonarr command by name. Known names: RefreshSeries, RescanSeries, EpisodeSearch, SeasonSearch, SeriesSearch, MissingEpisodeSearch, CutoffUnmetEpisodeSearch, DownloadedEpisodesScan, RenameFiles, RenameSeries, RssSync, RefreshMonitoredDownloads, ImportListSync, ManualImport, ClearBlocklist, CheckHealth, Housekeeping, Backup, ApplicationUpdate. Prefer the dedicated tools (refresh_series, search_series, ...) where one exists.",
+    `Queue a Sonarr command by name. Only library and maintenance commands are allowed: ${COMMANDS.join(", ")}. Commands that update the application or reset the API key are not available. Prefer the dedicated tools (refresh_series, search_series, ...) where one exists.`,
     {
-      name: z.string().describe("Command name, e.g. 'RssSync'"),
+      name: z.enum(COMMANDS).describe("Command name, e.g. 'RssSync'"),
       params: z
-        .record(z.unknown())
+        .record(z.string(), z.unknown())
         .optional()
-        .describe("Extra command body fields, e.g. { seriesId: 12 } or { episodeIds: [1, 2] }"),
+        .describe(
+          "Extra command body fields, e.g. { seriesId: 12 } or { episodeIds: [1, 2] }; a 'name' key is ignored",
+        ),
     },
+    DESTRUCTIVE,
     async ({ name, params }) => {
       try {
-        const res = (await client.post("/api/v3/command", {
-          name,
-          ...(params ?? {}),
-        })) as Record<string, unknown>;
+        const extra = Object.fromEntries(
+          Object.entries(params ?? {}).filter(([k]) => k.toLowerCase() !== "name"),
+        );
+        const res = (await client.post("/api/v3/command", { ...extra, name })) as Record<
+          string,
+          unknown
+        >;
         return ok(summarizeCommand(res));
       } catch (e) {
         return err(e);
@@ -72,7 +103,8 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "cancel_command",
     "Cancel a queued or running command.",
-    { id: z.number().describe("Command id") },
+    { id: z.number().int().positive().describe("Command id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/command/${id}`));
@@ -86,6 +118,7 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
     "refresh_series",
     "Refresh metadata from TVDB for one series, or for the whole library when no id is given.",
     { series_id: z.number().optional().describe("Sonarr series id; all series when omitted") },
+    WRITE,
     async ({ series_id }) => {
       try {
         const res = (await client.post("/api/v3/command", {
@@ -103,6 +136,7 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
     "rescan_series",
     "Rescan the folder of one series (or all series) to pick up files added or removed outside Sonarr.",
     { series_id: z.number().optional().describe("Sonarr series id; all series when omitted") },
+    WRITE,
     async ({ series_id }) => {
       try {
         const res = (await client.post("/api/v3/command", {
@@ -119,7 +153,8 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "search_series",
     "Start an automatic search for all monitored missing episodes of a series.",
-    { series_id: z.number().describe("Sonarr series id") },
+    { series_id: z.number().int().positive().describe("Sonarr series id") },
+    WRITE,
     async ({ series_id }) => {
       try {
         const res = (await client.post("/api/v3/command", {
@@ -137,9 +172,10 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
     "search_season",
     "Start an automatic search for one season of a series.",
     {
-      series_id: z.number().describe("Sonarr series id"),
+      series_id: z.number().int().positive().describe("Sonarr series id"),
       season_number: z.number().describe("Season number (0 is specials)"),
     },
+    WRITE,
     async ({ series_id, season_number }) => {
       try {
         const res = (await client.post("/api/v3/command", {
@@ -158,6 +194,7 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
     "search_episodes",
     "Start an automatic search for specific episodes. Use search_releases first if you want to pick a release by hand.",
     { episode_ids: z.array(z.number()).describe("Sonarr episode ids") },
+    WRITE,
     async ({ episode_ids }) => {
       try {
         const res = (await client.post("/api/v3/command", {
@@ -175,6 +212,7 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
     "list_scheduled_tasks",
     "List Sonarr's scheduled maintenance tasks with their interval and last and next execution times.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/system/task")) as unknown[];
@@ -188,7 +226,8 @@ export function registerCommandTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "get_scheduled_task",
     "Get a single scheduled task by id.",
-    { id: z.number().describe("Scheduled task id") },
+    { id: z.number().int().positive().describe("Scheduled task id") },
+    READ,
     async ({ id }) => {
       try {
         return ok(await client.get(`/api/v3/system/task/${id}`));

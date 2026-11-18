@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { buildQS, ok, err, summarizeEpisode, summarizeList } from "../sonarr/format.js";
+import { buildQS, ok, err, summarizeEpisode, summarizeList, READ } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 const sortDirection = ["default", "ascending", "descending"] as const;
@@ -21,6 +21,7 @@ export function registerWantedTools(server: McpServer, client: SonarrClient) {
       include_series: z.boolean().optional().describe("Include the parent series object"),
       detailed: z.boolean().optional().describe("Return full episode objects instead of summaries"),
     },
+    READ,
     async ({ page, page_size, sort_key, sort_direction, monitored, include_series, detailed }) => {
       try {
         const qs = buildQS({
@@ -52,6 +53,7 @@ export function registerWantedTools(server: McpServer, client: SonarrClient) {
       include_episode_file: z.boolean().optional().describe("Include the current episode file"),
       detailed: z.boolean().optional().describe("Return full episode objects instead of summaries"),
     },
+    READ,
     async ({
       page,
       page_size,

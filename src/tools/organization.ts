@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { buildQS, ok, err } from "../sonarr/format.js";
+import { buildQS, ok, err, DELETE, READ, UPDATE, WRITE } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 export function registerOrganizationTools(server: McpServer, client: SonarrClient) {
@@ -8,6 +8,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
     "list_root_folders",
     "List root folders with their free space and any unmapped folders sitting in them. add_series needs one of these paths.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/rootfolder")) as Record<string, unknown>[];
@@ -30,7 +31,8 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
   server.tool(
     "get_root_folder",
     "Get one root folder including the full list of unmapped folders — series folders on disk that are not in the library.",
-    { id: z.number().describe("Root folder id") },
+    { id: z.number().int().positive().describe("Root folder id") },
+    READ,
     async ({ id }) => {
       try {
         return ok(await client.get(`/api/v3/rootfolder/${id}`));
@@ -44,6 +46,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
     "add_root_folder",
     "Add a root folder. The path must exist and be writable by Sonarr.",
     { path: z.string().describe("Absolute path as Sonarr sees it, e.g. '/tv'") },
+    WRITE,
     async ({ path }) => {
       try {
         return ok(await client.post("/api/v3/rootfolder", { path }));
@@ -56,7 +59,8 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
   server.tool(
     "delete_root_folder",
     "Remove a root folder from Sonarr. Files on disk are not touched.",
-    { id: z.number().describe("Root folder id") },
+    { id: z.number().int().positive().describe("Root folder id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/rootfolder/${id}`));
@@ -70,6 +74,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
     "list_tags",
     "List tags with their ids and labels. Tags link series to delay profiles, release profiles, indexers and notifications.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/tag")) as unknown[];
@@ -84,6 +89,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
     "list_tag_details",
     "List tags together with everything using them — series ids, indexer ids, notification ids and profile ids.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/tag/detail")) as unknown[];
@@ -98,6 +104,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
     "create_tag",
     "Create a tag.",
     { label: z.string().describe("Tag label, e.g. 'anime'") },
+    WRITE,
     async ({ label }) => {
       try {
         return ok(await client.post("/api/v3/tag", { label }));
@@ -111,9 +118,10 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
     "update_tag",
     "Rename a tag.",
     {
-      id: z.number().describe("Tag id"),
+      id: z.number().int().positive().describe("Tag id"),
       label: z.string().describe("New tag label"),
     },
+    UPDATE,
     async ({ id, label }) => {
       try {
         return ok(await client.put(`/api/v3/tag/${id}`, { id, label }));
@@ -126,7 +134,8 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
   server.tool(
     "delete_tag",
     "Delete a tag. It is removed from every series and provider using it.",
-    { id: z.number().describe("Tag id") },
+    { id: z.number().int().positive().describe("Tag id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/tag/${id}`));
@@ -143,6 +152,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
       page: z.number().optional().describe("Page number; unpaged when omitted"),
       page_size: z.number().optional().describe("Items per page"),
     },
+    READ,
     async ({ page, page_size }) => {
       try {
         if (page !== undefined || page_size !== undefined) {
@@ -167,6 +177,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
       tvdb_id: z.number().describe("TVDB id of the series to exclude"),
       title: z.string().describe("Series title, for display in the Sonarr UI"),
     },
+    WRITE,
     async ({ tvdb_id, title }) => {
       try {
         return ok(await client.post("/api/v3/importlistexclusion", { tvdbId: tvdb_id, title }));
@@ -179,7 +190,8 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
   server.tool(
     "delete_import_list_exclusion",
     "Remove an import list exclusion so lists may add the series again.",
-    { id: z.number().describe("Import list exclusion id") },
+    { id: z.number().int().positive().describe("Import list exclusion id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/importlistexclusion/${id}`));
@@ -193,6 +205,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
     "list_remote_path_mappings",
     "List remote path mappings — how paths reported by a download client on another host translate to paths Sonarr can read.",
     {},
+    READ,
     async () => {
       try {
         const data = (await client.get("/api/v3/remotepathmapping")) as unknown[];
@@ -211,6 +224,7 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
       remote_path: z.string().describe("Path as the download client reports it"),
       local_path: z.string().describe("Matching path as Sonarr sees it"),
     },
+    WRITE,
     async ({ host, remote_path, local_path }) => {
       try {
         return ok(
@@ -229,7 +243,8 @@ export function registerOrganizationTools(server: McpServer, client: SonarrClien
   server.tool(
     "delete_remote_path_mapping",
     "Delete a remote path mapping.",
-    { id: z.number().describe("Remote path mapping id") },
+    { id: z.number().int().positive().describe("Remote path mapping id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/remotepathmapping/${id}`));

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { registerCommandTools } from "../tools/commands.js";
+import { z } from "zod";
+import { registerCommandTools, COMMANDS } from "../tools/commands.js";
 import { collectTools, mockJson, stubFetch, callAt, payload } from "./helpers.js";
 
-const { tools } = collectTools(registerCommandTools);
+const { tools, schemas, descriptions } = collectTools(registerCommandTools);
 
 describe("command tools", () => {
   let mockFetch: ReturnType<typeof vi.fn>;
@@ -22,6 +23,37 @@ describe("command tools", () => {
     expect(call.url).toBe("http://sonarr:8989/api/v3/command");
     expect(call.body).toEqual({ name: "RssSync", seriesId: 4 });
     expect(payload(res)).toMatchObject({ id: 3, name: "RssSync", status: "queued" });
+  });
+
+  it("run_command only accepts allowlisted command names", () => {
+    const schema = z.object(schemas.get("run_command") as z.ZodRawShape);
+    for (const name of COMMANDS) {
+      expect(schema.safeParse({ name }).success).toBe(true);
+    }
+    for (const name of [
+      "ApplicationUpdate",
+      "ResetApiKey",
+      "DeleteLogFiles",
+      "DeleteUpdateLogFiles",
+      "ClearLog",
+      "CleanUpRecycleBin",
+      "ResetQualityDefinitions",
+      "rsssync",
+      "",
+    ]) {
+      expect(schema.safeParse({ name }).success).toBe(false);
+      expect(COMMANDS).not.toContain(name);
+    }
+    expect(descriptions.get("run_command")).not.toContain("ApplicationUpdate,");
+  });
+
+  it("run_command does not let params override the command name", async () => {
+    mockFetch.mockResolvedValueOnce(mockJson({ id: 3 }));
+    await tools.get("run_command")!({
+      name: "RssSync",
+      params: { name: "ApplicationUpdate", Name: "ResetApiKey", NAME: "x", seriesId: 4 },
+    });
+    expect(callAt(mockFetch).body).toEqual({ name: "RssSync", seriesId: 4 });
   });
 
   it("search_season sends SeasonSearch with the season number", async () => {

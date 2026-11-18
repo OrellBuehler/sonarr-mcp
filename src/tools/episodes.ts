@@ -7,6 +7,9 @@ import {
   pruneUndefined,
   summarizeEpisode,
   type SonarrEpisode,
+  DELETE,
+  READ,
+  UPDATE,
 } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
@@ -31,6 +34,7 @@ export function registerEpisodeTools(server: McpServer, client: SonarrClient) {
       monitored: z.boolean().optional().describe("Only monitored (true) or unmonitored (false)"),
       detailed: z.boolean().optional().describe("Return full episode objects instead of summaries"),
     },
+    READ,
     async ({
       series_id,
       season_number,
@@ -67,7 +71,8 @@ export function registerEpisodeTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "get_episode",
     "Get the full episode object, including the overview and the linked episode file with its quality and media info.",
-    { id: z.number().describe("Sonarr episode id") },
+    { id: z.number().int().positive().describe("Sonarr episode id") },
+    READ,
     async ({ id }) => {
       try {
         return ok(await client.get(`/api/v3/episode/${id}`));
@@ -84,6 +89,7 @@ export function registerEpisodeTools(server: McpServer, client: SonarrClient) {
       episode_ids: z.array(z.number()).describe("Sonarr episode ids"),
       monitored: z.boolean().describe("true to monitor, false to unmonitor"),
     },
+    UPDATE,
     async ({ episode_ids, monitored }) => {
       try {
         return ok(
@@ -102,6 +108,7 @@ export function registerEpisodeTools(server: McpServer, client: SonarrClient) {
       series_id: z.number().optional().describe("Sonarr series id"),
       episode_file_ids: z.array(z.number()).optional().describe("Fetch these specific file ids"),
     },
+    READ,
     async ({ series_id, episode_file_ids }) => {
       try {
         const data = (await client.get(
@@ -120,7 +127,8 @@ export function registerEpisodeTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "get_episode_file",
     "Get a single episode file, including its full media info.",
-    { id: z.number().describe("Episode file id") },
+    { id: z.number().int().positive().describe("Episode file id") },
+    READ,
     async ({ id }) => {
       try {
         return ok(await client.get(`/api/v3/episodefile/${id}`));
@@ -133,7 +141,8 @@ export function registerEpisodeTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "delete_episode_file",
     "Delete one episode file from disk. The episode stays in the library and becomes missing.",
-    { id: z.number().describe("Episode file id") },
+    { id: z.number().int().positive().describe("Episode file id") },
+    DELETE,
     async ({ id }) => {
       try {
         return ok(await client.delete(`/api/v3/episodefile/${id}`));
@@ -147,6 +156,7 @@ export function registerEpisodeTools(server: McpServer, client: SonarrClient) {
     "delete_episode_files",
     "Delete several episode files from disk in one call.",
     { episode_file_ids: z.array(z.number()).describe("Episode file ids to delete") },
+    DELETE,
     async ({ episode_file_ids }) => {
       try {
         return ok(
@@ -164,16 +174,17 @@ export function registerEpisodeTools(server: McpServer, client: SonarrClient) {
     {
       episode_file_ids: z.array(z.number()).describe("Episode file ids to update"),
       quality: z
-        .record(z.unknown())
+        .record(z.string(), z.unknown())
         .optional()
         .describe("QualityModel object, e.g. { quality: { id: 9 }, revision: { version: 1 } }"),
       languages: z
-        .array(z.record(z.unknown()))
+        .array(z.record(z.string(), z.unknown()))
         .optional()
         .describe("Language objects, e.g. [{ id: 1, name: 'English' }] — see list_languages"),
       release_group: z.string().optional().describe("Release group to record"),
       scene_name: z.string().optional().describe("Scene name to record"),
     },
+    UPDATE,
     async ({ episode_file_ids, quality, languages, release_group, scene_name }) => {
       try {
         const body = pruneUndefined({

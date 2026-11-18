@@ -1,6 +1,17 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { ok, err } from "../sonarr/format.js";
+import {
+  ok,
+  err,
+  redactProvider,
+  hasRedacted,
+  restoreRedacted,
+  READ,
+  WRITE,
+  UPDATE,
+  DELETE,
+  REDACTED,
+} from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 interface ProviderKind {
@@ -44,15 +55,34 @@ const kinds: ProviderKind[] = [
 
 function summarizeProvider(p: Record<string, unknown>): Record<string, unknown> {
   const { fields: _fields, presets: _presets, ...rest } = p;
-  return rest;
+  return redactProvider(rest);
+}
+
+const providerId = z.number().int().positive();
+
+async function withStoredSecrets(
+  client: SonarrClient,
+  path: string,
+  config: Record<string, unknown>,
+  id: unknown,
+): Promise<Record<string, unknown>> {
+  if (!hasRedacted(config)) return config;
+  if (!providerId.safeParse(id).success) {
+    throw new Error(
+      `The config contains ${REDACTED} placeholders and there is no saved provider to take the values from. Replace them with the real values.`,
+    );
+  }
+  const stored = (await client.get(`/api/v3/${path}/${id}`)) as Record<string, unknown>;
+  return restoreRedacted(config, stored);
 }
 
 export function registerProviderTools(server: McpServer, client: SonarrClient) {
   for (const kind of kinds) {
     server.tool(
       `list_${kind.plural}`,
-      `List the configured ${kind.label}s. Secret field values are masked by Sonarr; the 'fields' array is omitted here — use get_${kind.singular} for it.`,
+      `List the configured ${kind.label}s. The 'fields' array is omitted here — use get_${kind.singular} for it.`,
       {},
+      READ,
       async () => {
         try {
           const data = (await client.get(`/api/v3/${kind.path}`)) as Record<string, unknown>[];
@@ -65,11 +95,12 @@ export function registerProviderTools(server: McpServer, client: SonarrClient) {
 
     server.tool(
       `get_${kind.singular}`,
-      `Get one ${kind.label} including its full 'fields' array (the implementation-specific settings).`,
-      { id: z.number().describe(`${kind.label} id`) },
+      `Get one ${kind.label} including its full 'fields' array (the implementation-specific settings). Secret values (API keys, passwords, tokens, credentials inside URLs) are returned as '${REDACTED}'.`,
+      { id: providerId.describe(`${kind.label} id`) },
+      READ,
       async ({ id }) => {
         try {
-          return ok(await client.get(`/api/v3/${kind.path}/${id}`));
+          return ok(redactProvider(await client.get(`/api/v3/${kind.path}/${id}`)));
         } catch (e) {
           return err(e);
         }
@@ -85,6 +116,7 @@ export function registerProviderTools(server: McpServer, client: SonarrClient) {
           .optional()
           .describe("Only the schema for this implementation, e.g. 'Newznab' or 'QBittorrent'"),
       },
+      READ,
       async ({ implementation }) => {
         try {
           const data = (await client.get(`/api/v3/${kind.path}/schema`)) as Record<
@@ -98,7 +130,7 @@ export function registerProviderTools(server: McpServer, client: SonarrClient) {
                 String(s.implementation ?? "").toLowerCase() === q ||
                 String(s.implementationName ?? "").toLowerCase() === q,
             );
-            return ok({ count: match.length, schemas: match });
+            return ok({ count: match.length, schemas: redactProvider(match) });
           }
           return ok({
             count: data.length,
@@ -117,15 +149,21 @@ export function registerProviderTools(server: McpServer, client: SonarrClient) {
 
     server.tool(
       `create_${kind.singular}`,
-      `Add a new ${kind.label}. Build the body from get_${kind.singular}_schema: it needs name, implementation, configContract and the fields array, plus ${kind.extra}.`,
+      `Add a new ${kind.label}. Build the body from get_${kind.singular}_schema: it needs name, implementation, configContract and the fields array, plus ${kind.extra}. Secrets must be real values — '${REDACTED}' placeholders are rejected.`,
       {
         config: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .describe(`Full ${kind.label} resource object, based on the schema`),
       },
+      WRITE,
       async ({ config }) => {
         try {
-          return ok(await client.post(`/api/v3/${kind.path}`, config));
+          if (hasRedacted(config)) {
+            throw new Error(
+              `The config contains ${REDACTED} placeholders. Replace them with the real values.`,
+            );
+          }
+          return ok(redactProvider(await client.post(`/api/v3/${kind.path}`, config)));
         } catch (e) {
           return err(e);
         }
@@ -134,14 +172,20 @@ export function registerProviderTools(server: McpServer, client: SonarrClient) {
 
     server.tool(
       `update_${kind.singular}`,
-      `Update an existing ${kind.label}. Fetch it with get_${kind.singular} first, change what you need and send the whole object back.`,
+      `Update an existing ${kind.label}. Fetch it with get_${kind.singular} first, change what you need and send the whole object back. Leave '${REDACTED}' values untouched to keep the stored secret; they are replaced with the stored value before saving.`,
       {
-        id: z.number().describe(`${kind.label} id`),
-        config: z.record(z.unknown()).describe(`Full ${kind.label} resource object including id`),
+        id: providerId.describe(`${kind.label} id`),
+        config: z
+          .record(z.string(), z.unknown())
+          .describe(`Full ${kind.label} resource object including id`),
       },
+      UPDATE,
       async ({ id, config }) => {
         try {
-          return ok(await client.put(`/api/v3/${kind.path}/${id}`, { ...config, id }));
+          const body = await withStoredSecrets(client, kind.path, config, id);
+          return ok(
+            redactProvider(await client.put(`/api/v3/${kind.path}/${id}`, { ...body, id })),
+          );
         } catch (e) {
           return err(e);
         }
@@ -151,7 +195,8 @@ export function registerProviderTools(server: McpServer, client: SonarrClient) {
     server.tool(
       `delete_${kind.singular}`,
       `Delete a ${kind.label}.`,
-      { id: z.number().describe(`${kind.label} id`) },
+      { id: providerId.describe(`${kind.label} id`) },
+      DELETE,
       async ({ id }) => {
         try {
           return ok(await client.delete(`/api/v3/${kind.path}/${id}`));
@@ -163,16 +208,22 @@ export function registerProviderTools(server: McpServer, client: SonarrClient) {
 
     server.tool(
       `test_${kind.singular}`,
-      `Test a ${kind.label} configuration without saving it. Pass a config object to test a draft, or an id to test an existing one.`,
+      `Test a ${kind.label} configuration without saving it. Pass a config object to test a draft, or an id to test an existing one. A draft may keep '${REDACTED}' values only when it carries the id of a saved ${kind.label}.`,
       {
-        id: z.number().optional().describe(`Existing ${kind.label} id to test`),
-        config: z.record(z.unknown()).optional().describe("Draft resource object to test instead"),
+        id: providerId.optional().describe(`Existing ${kind.label} id to test`),
+        config: z
+          .record(z.string(), z.unknown())
+          .optional()
+          .describe("Draft resource object to test instead"),
       },
+      WRITE,
       async ({ id, config }) => {
         try {
           if (!config && id === undefined) throw new Error("Pass either id or config");
-          const body = config ?? (await client.get(`/api/v3/${kind.path}/${id}`));
-          return ok(await client.post(`/api/v3/${kind.path}/test`, body));
+          const body = config
+            ? await withStoredSecrets(client, kind.path, config, config.id ?? id)
+            : await client.get(`/api/v3/${kind.path}/${id}`);
+          return ok(redactProvider(await client.post(`/api/v3/${kind.path}/test`, body)));
         } catch (e) {
           return err(e);
         }

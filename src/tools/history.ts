@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { buildQS, ok, err } from "../sonarr/format.js";
+import { buildQS, ok, err, DESTRUCTIVE, READ } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 const eventTypes = [
@@ -32,6 +32,7 @@ export function registerHistoryTools(server: McpServer, client: SonarrClient) {
       include_series: z.boolean().optional().describe("Include the parent series object"),
       include_episode: z.boolean().optional().describe("Include the episode object"),
     },
+    READ,
     async ({
       page,
       page_size,
@@ -73,6 +74,7 @@ export function registerHistoryTools(server: McpServer, client: SonarrClient) {
       include_series: z.boolean().optional().describe("Include the parent series object"),
       include_episode: z.boolean().optional().describe("Include the episode object"),
     },
+    READ,
     async ({ date, event_type, include_series, include_episode }) => {
       try {
         const qs = buildQS({
@@ -93,12 +95,13 @@ export function registerHistoryTools(server: McpServer, client: SonarrClient) {
     "get_series_history",
     "Get the full history for one series, optionally narrowed to a single season.",
     {
-      series_id: z.number().describe("Sonarr series id"),
+      series_id: z.number().int().positive().describe("Sonarr series id"),
       season_number: z.number().optional().describe("Only this season number"),
       event_type: z.enum(eventTypes).optional().describe("Only this event type"),
       include_series: z.boolean().optional().describe("Include the parent series object"),
       include_episode: z.boolean().optional().describe("Include the episode object"),
     },
+    READ,
     async ({ series_id, season_number, event_type, include_series, include_episode }) => {
       try {
         const qs = buildQS({
@@ -119,7 +122,8 @@ export function registerHistoryTools(server: McpServer, client: SonarrClient) {
   server.tool(
     "mark_history_item_failed",
     "Mark a grabbed history item as failed. Sonarr blocklists the release and searches for a replacement.",
-    { id: z.number().describe("History record id") },
+    { id: z.number().int().positive().describe("History record id") },
+    DESTRUCTIVE,
     async ({ id }) => {
       try {
         return ok(await client.post(`/api/v3/history/failed/${id}`));

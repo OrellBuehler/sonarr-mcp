@@ -1,6 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { buildQS, ok, err, summarizeEpisode, type SonarrEpisode } from "../sonarr/format.js";
+import { buildQS, ok, err, summarizeEpisode, type SonarrEpisode, READ } from "../sonarr/format.js";
 import type { SonarrClient } from "../sonarr/client.js";
 
 export function registerCalendarTools(server: McpServer, client: SonarrClient) {
@@ -22,6 +22,7 @@ export function registerCalendarTools(server: McpServer, client: SonarrClient) {
       tags: z.array(z.number()).optional().describe("Only series carrying these tag ids"),
       detailed: z.boolean().optional().describe("Return full episode objects instead of summaries"),
     },
+    READ,
     async ({ start, end, unmonitored, include_series, include_episode_file, tags, detailed }) => {
       try {
         const qs = buildQS({
