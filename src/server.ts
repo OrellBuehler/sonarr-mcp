@@ -16,7 +16,7 @@ import { registerSettingsTools } from "./tools/settings.js";
 import { registerSystemTools } from "./tools/system.js";
 
 export function createServer(client: SonarrClient): McpServer {
-  const server = new McpServer({ name: "sonarr-mcp", version: "0.2.1" });
+  const server = new McpServer({ name: "sonarr-mcp", version: "0.2.2" });
   registerSeriesTools(server, client);
   registerEpisodeTools(server, client);
   registerCalendarTools(server, client);
