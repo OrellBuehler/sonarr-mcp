@@ -62,14 +62,14 @@ describe("calendar, wanted, history and library tools", () => {
     expect(body.records[0].overview).toBeUndefined();
   });
 
-  it("get_history repeats event types and series ids", async () => {
+  it("get_history sends event types as their numeric ids and repeats series ids", async () => {
     mockFetch.mockResolvedValueOnce(mockJson({ records: [] }));
     await tools.get("get_history")!({
       event_type: ["grabbed", "downloadFailed"],
       series_ids: [1, 2],
     });
     expect(callAt(mockFetch).url).toBe(
-      "http://sonarr:8989/api/v3/history?eventType=grabbed&eventType=downloadFailed&seriesIds=1&seriesIds=2",
+      "http://sonarr:8989/api/v3/history?eventType=1&eventType=4&seriesIds=1&seriesIds=2",
     );
   });
 

@@ -51,7 +51,7 @@ export function registerHistoryTools(server: McpServer, client: SonarrClient) {
           pageSize: page_size,
           sortKey: sort_key,
           sortDirection: sort_direction,
-          eventType: event_type,
+          eventType: event_type?.map((t) => eventTypes.indexOf(t)),
           episodeId: episode_id,
           seriesIds: series_ids,
           downloadId: download_id,
