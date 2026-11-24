@@ -54,6 +54,20 @@ describe("SonarrClient", () => {
     );
   });
 
+  it("redacts api keys from error bodies", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockError(
+        400,
+        '[{"errorMessage":"failed: [GET] at [http://prowlarr:9696/4/api?t=tvsearch\\u0026apikey=88ef17\\u0026offset=0]. echo sonarr-key"}]',
+      ),
+    );
+    const client = new SonarrClient("http://sonarr:8989", "sonarr-key");
+    const error = await client.get("/api/v3/indexer/test").catch((e: Error) => e);
+    expect(String(error)).not.toContain("88ef17");
+    expect(String(error)).not.toContain("sonarr-key");
+    expect(String(error)).toContain("\\u0026apikey=[redacted]\\u0026offset=0");
+  });
+
   it("returns success for 204 and for an empty JSON body", async () => {
     const client = new SonarrClient("http://sonarr:8989", "k");
     mockFetch.mockResolvedValueOnce({
