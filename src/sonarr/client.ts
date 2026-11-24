@@ -1,3 +1,5 @@
+import { REDACTED, redactUrls } from "./format.js";
+
 export class SonarrClient {
   readonly baseUrl: string;
   readonly apiKey: string;
@@ -34,7 +36,7 @@ export class SonarrClient {
       throw e;
     }
     if (!res.ok) {
-      const body = await res.text();
+      const body = redactUrls((await res.text()).replaceAll(this.apiKey, REDACTED));
       throw new Error(`${res.status} ${res.statusText}: ${body}`);
     }
     return res;

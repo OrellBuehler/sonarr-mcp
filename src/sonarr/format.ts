@@ -173,9 +173,9 @@ export const REDACTED = "[redacted]";
 const SECRET = /api_?key|passw|passkey|passphrase|token|secret|cookie|credential|webhook/i;
 const URL_USERINFO = /(\b[a-z][a-z0-9+.-]*:\/\/)[^\s/?#@]+@/gi;
 const URL_SECRET_PARAM =
-  /([?&](?:api_?key|passw(?:or)?d|passkey|token|secret|auth|sig(?:nature)?)=)[^&#\s]+/gi;
+  /((?:[?&]|\\u0026)(?:api_?key|passw(?:or)?d|passkey|token|secret|auth|sig(?:nature)?)=)[^&#\s\\"]+/gi;
 
-function redactUrls(value: string): string {
+export function redactUrls(value: string): string {
   return value.replace(URL_USERINFO, `$1${REDACTED}@`).replace(URL_SECRET_PARAM, `$1${REDACTED}`);
 }
 
